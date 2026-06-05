@@ -1,0 +1,51 @@
+Projects CLI TODO
+=================
+
+Architecture
+------------
+- Split project1.py into a small package once the file grows past simple maintenance:
+  - projects_cli/cli.py: Click command definitions and user-facing output
+  - projects_cli/config.py: project root, template paths, and defaults
+  - projects_cli/metadata.py: read, validate, and normalize metadata.json
+  - projects_cli/project_service.py: create, list, resolve, open, and run projects
+  - projects_cli/system.py: OS-specific opening and editor launching
+- Keep command functions thin. They should parse input, call helper/service functions, and print results.
+- Keep filesystem behavior in one layer so future changes do not require editing every command.
+- Prefer returning values from helper functions instead of printing inside them, except for CLI-only helpers.
+- Add a config file later if the projects folder should become user-editable.
+
+Documentation
+-------------
+- Rename project1.py to something clearer, such as projects_cli.py or cli.py.
+- Add examples for project names with spaces.
+- Document metadata fields:
+  - programming_language
+  - description
+  - project_status
+  - tag
+- Add a short troubleshooting section for missing VS Code, missing main.txt, and invalid metadata.json.
+- Consider documenting installation through PATH so the projects command works from any folder.
+
+Code Quality
+------------
+- Add small unit tests for metadata loading, project name parsing, and project listing.
+- Validate metadata.json more strictly and show friendly errors for missing or wrong field types.
+- Add a helper for loading main.txt and resolving the main file path.
+- Use consistent command naming in docs and help output.
+- Consider adding type hints once the code is split into modules.
+
+Features
+--------
+- Add an edit command to update metadata from the CLI.
+- Add a delete/archive command with confirmation.
+- Add a rename command that safely renames a project folder.
+- Add a search command for finding projects by name, tag, language, or description.
+- Add a status command that summarizes how many projects are under development, finished, paused, etc.
+- Add support for choosing the editor through configuration instead of assuming VS Code.
+
+Nice To Have
+------------
+- Add shell completion for project names.
+- Add richer list output with columns for name, tag, language, and status.
+- Add a doctor command that checks templates, metadata files, main.txt targets, and editor availability.
+- Add migration support to convert old metadata keys like desc_ into description.
