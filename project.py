@@ -12,7 +12,7 @@ PROJECT_PATH = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = Path(__file__).resolve().parent / "templates"
 CODE_FOLDER_NAME = Path(__file__).resolve().parent.name
 DEFAULT_TAG = "untagged"
-REQUIRED_TEMPLATE_FILES = ("main.py", "main.txt", "metadata.json")
+REQUIRED_TEMPLATE_FILES = ("main.txt", "metadata.json")
 
 
 def format_project_name(project_name):
@@ -68,14 +68,17 @@ def open_with_system(path):
 
 
 def open_in_vscode(project_folder, project_name):
-    """Open a project in VS Code, focusing main.py when it exists."""
-    main_py = project_folder / "main.py"
     command = ["code", str(project_folder)]
 
-    if main_py.is_file():
-        command.extend(["-g", str(main_py)])
-    else:
-        click.echo(f"Warning: main.py not found in {project_name}; opening folder only.")
+    main_txt = project_folder / "main.txt"
+
+    if main_txt.exists():
+        entry_file = project_folder / main_txt.read_text(
+            encoding="utf-8"
+        ).strip()
+
+        if entry_file.exists():
+            command.extend(["-g", str(entry_file)])
 
     try:
         subprocess.run(command, shell=True, check=True)
@@ -93,7 +96,12 @@ def cli(ctx):
 
 
 @cli.command(name="list")
-def list_projects():
+@click.option(
+    "--show-language",
+    is_flag=True,
+    help="Display programming language for each project."
+)
+def list_projects(show_language):
     """List projects grouped by metadata tag."""
     click.echo("\nYour Projects:\n------------------")
 
@@ -107,9 +115,24 @@ def list_projects():
                 projects_by_tag.setdefault(tag, []).append(entry.name)
 
         for tag in sorted(projects_by_tag):
+
             click.echo(f"\n{tag.upper()} PROJECTS:")
+
             for name in sorted(projects_by_tag[tag]):
-                click.echo(f" - {name}")
+
+                if show_language:
+                    metadata = load_metadata(PROJECT_PATH / name)
+
+                    language = (
+                        metadata.get("programming_language", "unknown")
+                        if metadata
+                        else "unknown"
+                    )
+
+                    click.echo(f" - {name} [{language}]")
+
+                else:
+                    click.echo(f" - {name}")
 
     except FileNotFoundError:
         click.echo(f"Project path not found: {PROJECT_PATH}")
@@ -138,8 +161,44 @@ def start(project_name):
     click.echo(f"Running {main_file}...\n")
 
     try:
-        if main_file_path.suffix.lower() == ".py":
-            subprocess.run([sys.executable, str(main_file_path)], check=True)
+        metadata = load_metadata(project_folder)
+
+        language = (
+            metadata.get("programming_language", "python").lower()
+            if metadata
+            else "python"
+        )
+
+        if language == "python":
+            subprocess.run(
+                [sys.executable, str(main_file_path)],
+                check=True
+            )
+
+        elif language == "javascript":
+            subprocess.run(
+                ["node", str(main_file_path)],
+                check=True
+            )
+
+        elif language == "c":
+            exe_path = project_folder / "program.exe"
+
+            subprocess.run(
+                [
+                    "gcc",
+                    str(main_file_path),
+                    "-o",
+                    str(exe_path)
+                ],
+                check=True
+            )
+
+            subprocess.run(
+                [str(exe_path)],
+                check=True
+            )
+
         else:
             open_with_system(main_file_path)
     except (subprocess.SubprocessError, OSError) as error:
@@ -175,7 +234,13 @@ def desc(project_name):
 
 @cli.command()
 @click.argument("project_name", nargs=-1)
-def create(project_name):
+@click.option(
+    "--lang",
+    default="python",
+    type=click.Choice(["python", "javascript", "c"]),
+    help="Project language."
+)
+def create(project_name, lang):
     """Create a project from templates, then open it in VS Code."""
     project_name_str = format_project_name(project_name)
     if not project_name_str:
@@ -183,15 +248,20 @@ def create(project_name):
         return
 
     project_folder = PROJECT_PATH / project_name_str
+    template_lang_folder = TEMPLATE_PATH / lang
+
+    if not template_lang_folder.exists():
+        click.echo(f"Template not found: {lang}")
+        return
 
     if not project_folder.exists():
-        shutil.copytree(TEMPLATE_PATH, project_folder)
+        shutil.copytree(template_lang_folder, project_folder)
         click.echo(f"Project '{project_name_str}' created at {project_folder}.")
     else:
         click.echo(f"Project '{project_name_str}' already exists. Checking required files...")
         for filename in REQUIRED_TEMPLATE_FILES:
             target_file = project_folder / filename
-            template_file = TEMPLATE_PATH / filename
+            template_file = template_lang_folder / filename
             if not target_file.exists():
                 if template_file.exists():
                     shutil.copy(template_file, target_file)
@@ -237,17 +307,38 @@ def open_projects_folder(project_name):
 @cli.command()
 def help():
     """Show the custom command overview."""
+
     click.echo("\n==============================")
     click.echo("        PROJECTS CLI")
     click.echo("==============================\n")
+
     click.echo("Commands:")
-    click.echo("  list                  - list project folders grouped by metadata tag")
-    click.echo("  start <name>          - run the file named in the project's main.txt")
-    click.echo("  create <name>         - create a project from templates and open it in VS Code")
-    click.echo("  open <name>           - open a project in VS Code")
-    click.echo("  folder [name]         - open the projects folder, or one project, in file explorer")
-    click.echo("  desc <name>           - show project language, status, tag, and description")
-    click.echo("  help                  - show this command overview\n")
+    click.echo("  list")
+    click.echo("      List all projects grouped by tag.\n")
+
+    click.echo("  create <name> [--lang python|javascript|c]")
+    click.echo("      Create a new project from a language template.")
+    click.echo("      Default language: python\n")
+
+    click.echo("  start <name>")
+    click.echo("      Run the project's entry file.")
+    click.echo("      Supports Python, JavaScript (Node.js), and C.\n")
+
+    click.echo("  open <name>")
+    click.echo("      Open a project in VS Code.\n")
+
+    click.echo("  folder [name]")
+    click.echo("      Open the projects folder or a project folder.\n")
+
+    click.echo("  desc <name>")
+    click.echo("      Show project metadata.\n")
+
+    click.echo("Examples:")
+    click.echo("  projects create My API")
+    click.echo("  projects create Discord Bot --lang javascript")
+    click.echo("  projects create Game Engine --lang c")
+    click.echo("  projects start Discord Bot")
+    click.echo("  projects desc Game Engine\n")
 
 
 if __name__ == "__main__":
