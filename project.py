@@ -341,5 +341,16 @@ def help():
     click.echo("  projects desc Game Engine\n")
 
 
+try:
+    from completer import interactive_shell
+
+    @cli.command()
+    def shell():
+        """Start interactive prompt toolkit shell with autocomplete."""
+        interactive_shell(cli)
+
+except Exception as e:
+    print(f"completer import failed: {e}")
+
 if __name__ == "__main__":
     cli()
